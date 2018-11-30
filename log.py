@@ -35,8 +35,8 @@ class Log:
         return len(self.log)
 
 from enum import Enum
-
 Type = Enum("Type", "LEAF NODE MEM_NODE")
+
 class IndexBlock:
     def __init__(self):
         self.index_block = {}
@@ -174,28 +174,32 @@ if __name__ == "__main__":
     index = TransactionalIndex(log)
 
     import uuid
+    import time
+    t0 = time.time()
     for i in range(100000):
         uid = uuid.uuid4().hex[:]
         key = uid + "_key"
         value = uid + "_value"
         value_offset = log.put(value)
         index.put(key, value_offset)
-        assert(index.get(key) == value_offset)
-        assert(log.get(index.get(key)) == value)
-
 
     for key in ["test", "test", "testa", "testb", "testab", "testab", "testac"
                 "test", "test", "testa", "testb", "testab", "testab", "testac"]:
         index.put(key, log.put(key))
 
+    t1 = time.time()
+    print("done insert ", t1-t0)
+    t0 = time.time()
+    index.commit()
+    t1 = time.time()
+    print("done commit ", t1-t0)
+    t0 = time.time()
+
     counter = 0
     def tmp(key, value):
         global counter
         counter += 1
-    index.walk(tmp, True)
-    print("values", counter)
-    print("commit offset ", index.commit())
-
-    counter = 0
     index.walk(tmp)
-    print("values", counter)
+    print("done traversing {} key-values.".format(counter))
+    t1 = time.time()
+    print("done walk ", t1-t0)
