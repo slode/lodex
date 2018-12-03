@@ -35,7 +35,7 @@ class Log:
         return len(self.log)
 
 from enum import Enum
-Type = Enum("Type", "LEAF NODE MEM_NODE")
+Type = Enum("Type", "LEAF NODE MEM_NODE ROOT_NODE")
 
 class IndexBlock:
     def __init__(self):
@@ -45,6 +45,7 @@ class IndexBlock:
         return key_frag in self.index_block
 
     # type NODE, LEAF, cache
+    # Use sorted list for c impl
     def put(self, key_frag, key, value, typ):
         self.index_block[key_frag] = (key, value, typ)
 
@@ -64,18 +65,18 @@ class TransactionalIndex:
         self.root = log.get_last()
         self.in_memory_blocks = MemLog()
 
-    def walk(self, callback, all_nodes=False):
+    def walk(self, callback, internal_nodes=False):
         def rec_do(block, depth):
-            #print("--" * depth + str(block.index_block))
+            print("--" * depth + str(block.index_block))
             for subkey in block.index_block:
                 entry = block.get(subkey)
                 if entry[2] == Type.NODE:
                     rec_do(self.log.get(entry[1]), depth + 1)
-                    if all_nodes:
+                    if internal_nodes:
                         callback(entry[0], entry[1])
                 elif entry[2] == Type.MEM_NODE:
                     rec_do(self.in_memory_blocks.get(entry[1]), depth + 1)
-                    if all_nodes:
+                    if internal_nodes:
                         callback(entry[0], entry[1])
                 elif entry[2] == Type.LEAF:
                     callback(entry[0], entry[1])
@@ -87,20 +88,19 @@ class TransactionalIndex:
     def put(self, key, value):
         block = self.root
         self.in_memory_blocks.put(block)
-
         for (offset, subkey) in split_by_n(key, 2):
             if block.has(subkey) == False:
                 block.put(subkey, key, value, Type.LEAF)
                 return
 
-            if block.get(subkey)[2] == Type.NODE: # is not LEAF
+            if block.get(subkey)[2] == Type.NODE: # is NODE. bring into CACHE
                 child_block = self.log.get(block.get(subkey)[1])
-                child_block_index = self.in_memory_blocks.put(block)
+                child_block_index = self.in_memory_blocks.put(child_block)
                 block.put(subkey, None, child_block_index, Type.MEM_NODE)
                 block = child_block
                 continue
 
-            elif block.get(subkey)[2] == Type.MEM_NODE: # is not LEAF
+            elif block.get(subkey)[2] == Type.MEM_NODE: # is cached NODE. 
                 child_block = self.in_memory_blocks.get(block.get(subkey)[1])
                 block = child_block
                 continue
@@ -169,37 +169,35 @@ class TransactionalIndex:
         return root_index
 
 if __name__ == "__main__":
-    log   = Log()
+    log = Log()
     log.put(IndexBlock())
     index = TransactionalIndex(log)
 
     import uuid
-    import time
-    t0 = time.time()
-    for i in range(100000):
-        uid = uuid.uuid4().hex[:]
-        key = uid + "_key"
-        value = uid + "_value"
-        value_offset = log.put(value)
-        index.put(key, value_offset)
+    for i in range(10):
+        key = uuid.uuid4().hex[:8]
+        idx = log.put(key)
+        index.put(key, idx)
+        assert(index.get(key) == idx)
 
-    for key in ["test", "test", "testa", "testb", "testab", "testab", "testac"
+    for key in ["test", "test", "testa", "testb", "testab", "testab", "testac",
                 "test", "test", "testa", "testb", "testab", "testab", "testac"]:
-        index.put(key, log.put(key))
+        idx = log.put(key)
+        index.put(key, idx)
+        assert(index.get(key) == idx)
 
-    t1 = time.time()
-    print("done insert ", t1-t0)
-    t0 = time.time()
-    index.commit()
-    t1 = time.time()
-    print("done commit ", t1-t0)
-    t0 = time.time()
 
     counter = 0
+    import sys
     def tmp(key, value):
         global counter
         counter += 1
-    index.walk(tmp)
-    print("done traversing {} key-values.".format(counter))
-    t1 = time.time()
-    print("done walk ", t1-t0)
+
+    index.walk(tmp, internal_nodes=True)
+    index.commit()
+    index.walk(tmp, internal_nodes=True)
+    index.put("testa", log.put("testa"))
+    print(index.get("test"))
+    index.walk(tmp, internal_nodes=True)
+    index.commit()
+    index.walk(tmp, internal_nodes=True)
