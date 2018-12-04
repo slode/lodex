@@ -37,6 +37,10 @@ class Log:
 from enum import Enum
 Type = Enum("Type", "LEAF NODE MEM_NODE ROOT_NODE")
 
+class CheckPointBlock:
+    def __init__(self):
+        self.root_offset = 0
+
 class IndexBlock:
     def __init__(self):
         self.index_block = {}
@@ -51,6 +55,7 @@ class IndexBlock:
 
     def get(self, key_frag):
         return self.index_block[key_frag]
+
 
 def split_by_n( seq, n ):
     offset = 0
@@ -67,9 +72,9 @@ class TransactionalIndex:
 
     def walk(self, callback, internal_nodes=False):
         def rec_do(block, depth):
-            print("--" * depth + str(block.index_block))
             for subkey in block.index_block:
                 entry = block.get(subkey)
+                print("    " * depth + subkey + ": " + str(entry))
                 if entry[2] == Type.NODE:
                     rec_do(self.log.get(entry[1]), depth + 1)
                     if internal_nodes:
@@ -92,14 +97,12 @@ class TransactionalIndex:
             if block.has(subkey) == False:
                 block.put(subkey, key, value, Type.LEAF)
                 return
-
-            if block.get(subkey)[2] == Type.NODE: # is NODE. bring into CACHE
+            elif block.get(subkey)[2] == Type.NODE: # is NODE. bring into CACHE
                 child_block = self.log.get(block.get(subkey)[1])
                 child_block_index = self.in_memory_blocks.put(child_block)
                 block.put(subkey, None, child_block_index, Type.MEM_NODE)
                 block = child_block
                 continue
-
             elif block.get(subkey)[2] == Type.MEM_NODE: # is cached NODE. 
                 child_block = self.in_memory_blocks.get(block.get(subkey)[1])
                 block = child_block
@@ -170,12 +173,14 @@ class TransactionalIndex:
 
 if __name__ == "__main__":
     log = Log()
+    log.put(CheckPointBlock())
+    log.put(CheckPointBlock())
     log.put(IndexBlock())
     index = TransactionalIndex(log)
 
     import uuid
-    for i in range(10):
-        key = uuid.uuid4().hex[:8]
+    for i in range(100):
+        key = uuid.uuid4().hex[:]
         idx = log.put(key)
         index.put(key, idx)
         assert(index.get(key) == idx)
