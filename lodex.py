@@ -27,14 +27,14 @@ class DirtyBlocks:
 class FileLog:
     def __init__(self, filename):
         self.filename = filename
-        self.file = open(filename, "wb+")
+        try:
+            self.file = open(filename, "rb+")
+        except IOError:
+            self.file = open(filename, "wb+")
 
         if len(self) == 0:
-            print("Create database")
             self.write_checkpoint(0)
             self.write_checkpoint(self.put(IndexBlock()))
-        else:
-            print("open database")
 
     def write_checkpoint(self, offset):
         self.file.seek(0, 0)
@@ -66,6 +66,10 @@ class FileLog:
     def __len__(self):
         self.file.seek(0, 2)
         return self.file.tell()
+    
+    def close(self):
+        self.file.close()
+        self.file = None
 
 class IndexBlock:
     def __init__(self):
@@ -158,8 +162,7 @@ class LogIndex:
                 if entry_type == Type.LEAF: # LEAF
                     if entry[0] == key:
                         return entry[1]
-                    raise KeyError(
-                        "Could not find key {} in block {}".format(key, entry))
+                    raise KeyError(key + " not found")
                 elif entry_type == Type.NODE: # directory
                     block_offset = block.get(subkey)
                     block = self.log.get(block_offset[1])
@@ -171,6 +174,7 @@ class LogIndex:
             else:
                 raise KeyError(key + " not found")
 
+        # If NODE is also LEAF
         if block.has(""):
             entry = block.get("")
             if entry[0] == key:
@@ -191,56 +195,9 @@ class LogIndex:
 
         root_offset = commit_rec(self.root)
         self.log.write_checkpoint(root_offset)
-        self.root = log.get(root_offset)
         self.in_memory_blocks = DirtyBlocks()
         assert self.log.read_checkpoint() == root_offset
-        print(root_offset)
         return root_offset
-
-if True:
-    log = FileLog("database_test.ldx")
-    print(log.read_checkpoint())
-    index = LogIndex(log, log.read_checkpoint())
-
-    counter = 0
-    def tmp(key, value):
-        global counter
-        counter += 1
-        print("{}: {}".format(key, log.get(value)))
-
-    index.walk(tmp)
-
-    import uuid
-    for i in range(10):
-        key = uuid.uuid4().hex[:20]
-        idx = log.put(key)
-        index.put(key, idx)
-        assert(index.get(key) == idx)
-
-    for key in ["test", "test", "testa", "testb", "testab", "testab", "testac",
-                "test", "test", "testa", "testb", "testab", "testab", "testac"]:
-        idx = log.put(key)
-        index.put(key, idx)
-        assert(index.get(key) == idx)
-
-    counter = 0
-    def tmp(key, value):
-        global counter
-        counter += 1
-        print("{}: {}".format(key, log.get(value)))
-
-    index.commit()
-    index2 = LogIndex(log, log.read_checkpoint())
-    index2.put("testa", log.put("testa_valuevalue"))
-    print(log.get(index2.get("testa")))
-    index2.commit()
-    index2.walk(tmp)
-    print(counter)
-    exit(1)
-
-
-if __name__ == "__main__":
-    main()
 
 def main():
     main_parser = argparse.ArgumentParser(description='Lodex database API.')
@@ -299,11 +256,11 @@ def main():
             print("Stats for {}".format(log.filename))
             print(" items: {}".format(counter))
             print(" size: {}".format(len(log)))
-        elif args.operation == "export":
+        elif args.operation == "dump":
             def item_printer(key, value):
                 print("{}{}{}".format(key, args.sep, value))
             index.walk(item_printer)
-        elif args.operation == "import":
+        elif args.operation == "load":
             try:
                 for line in sys.stdin.readline():
                     key, value = line.split(args.sep)
@@ -312,5 +269,8 @@ def main():
             except:
                 sys.stderr.write("Failed to load values.")
                 exit(-1)
-        exit(0)
-    exit(-2)
+        log.close()
+
+if __name__ == "__main__":
+    main()
+
