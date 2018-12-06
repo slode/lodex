@@ -56,12 +56,12 @@ class IndexBlock:
     def get(self, key_frag):
         return self.index_block[key_frag]
 
+    def keys(self):
+        return sorted(self.index_block.keys())
 
 def split_by_n( seq, n ):
-    offset = 0
     while seq:
-        yield (offset, seq[:n])
-        offset += n
+        yield seq[:n]
         seq = seq[n:]
 
 class TransactionalIndex:
@@ -72,7 +72,7 @@ class TransactionalIndex:
 
     def walk(self, callback, internal_nodes=False):
         def rec_do(block, depth):
-            for subkey in block.index_block:
+            for subkey in block.keys():
                 entry = block.get(subkey)
                 print("    " * depth + subkey + ": " + str(entry))
                 if entry[2] == Type.NODE:
@@ -93,7 +93,7 @@ class TransactionalIndex:
     def put(self, key, value):
         block = self.root
         self.in_memory_blocks.put(block)
-        for (offset, subkey) in split_by_n(key, 2):
+        for subkey in split_by_n(key, 2):
             if block.has(subkey) == False:
                 block.put(subkey, key, value, Type.LEAF)
                 return
@@ -129,7 +129,7 @@ class TransactionalIndex:
     def get(self, key):
         block = self.root
         entry = None
-        for (offset, subkey) in split_by_n(key, 2):
+        for subkey in split_by_n(key, 2):
             if block.has(subkey):
                 entry = block.get(subkey)
                 entry_type = entry[2]
@@ -159,7 +159,7 @@ class TransactionalIndex:
             return None
 
         def commit_rec(block):
-            for subkey in block.index_block:
+            for subkey in block.keys():
                 entry = block.get(subkey)
                 if entry[2] == Type.MEM_NODE:
                     block_id = commit_rec(self.in_memory_blocks.get(entry[1]))
@@ -179,8 +179,8 @@ if __name__ == "__main__":
     index = TransactionalIndex(log)
 
     import uuid
-    for i in range(100):
-        key = uuid.uuid4().hex[:]
+    for i in range(1000):
+        key = uuid.uuid4().hex[:20]
         idx = log.put(key)
         index.put(key, idx)
         assert(index.get(key) == idx)
@@ -200,9 +200,11 @@ if __name__ == "__main__":
 
     index.walk(tmp, internal_nodes=True)
     index.commit()
+    print("COMMIT")
     index.walk(tmp, internal_nodes=True)
     index.put("testa", log.put("testa"))
-    print(index.get("test"))
+    print("ADDED test:test")
     index.walk(tmp, internal_nodes=True)
     index.commit()
+    print("COMMIT")
     index.walk(tmp, internal_nodes=True)
