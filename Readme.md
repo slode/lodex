@@ -66,6 +66,16 @@ size:	201
 
 Contributions would be sweet, although not necessary, since `lodex` is perfect.
 
-No, just kidding. All contributions are welcome, especially the ones that
+No, just kidding.
+
+All contributions are welcome, especially the ones that
 reduce LOC without sacrificing feature or readability. Ideally, `lodex` will be
 used for educational purposes.
+
+## Authors
+
+Stian Lode [github](https://github.com/slode)
+
+# License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
