@@ -5,24 +5,37 @@ import pickle
 import sys
 
 from enum import Enum
-Type = Enum("Type", "LEAF NODE MEM_NODE ROOT_NODE")
+Type = Enum("Type", "LEAF NODE MEM_NODE")
 
 class DirtyBlocks:
     def __init__(self):
-        self.log = []
+        self.dirty_blocks = []
 
     def put(self, value):
-        self.log.append(value)
-        return len(self.log) - 1
+        self.dirty_blocks.append(value)
+        return len(self.dirty_blocks) - 1
 
     def get(self, offset):
-        return self.log[offset]
-
-    def get_last(self):
-        return self.log[-1]
+        return self.dirty_blocks[offset]
 
     def __len__(self):
-        return len(self.log)
+        return len(self.dirty_blocks)
+
+class IndexBlock:
+    def __init__(self):
+        self.index_block = {}
+
+    def has(self, key_frag):
+        return key_frag in self.index_block
+
+    def put(self, key_frag, key, value, typ):
+        self.index_block[key_frag] = (key, value, typ)
+
+    def get(self, key_frag):
+        return self.index_block[key_frag]
+
+    def keys(self):
+        return sorted(self.index_block.keys())
 
 class FileLog:
     def __init__(self, filename):
@@ -71,52 +84,34 @@ class FileLog:
         self.file.close()
         self.file = None
 
-class IndexBlock:
-    def __init__(self):
-        self.index_block = {}
-
-    def has(self, key_frag):
-        return key_frag in self.index_block
-
-    def put(self, key_frag, key, value, typ):
-        self.index_block[key_frag] = (key, value, typ)
-
-    def get(self, key_frag):
-        return self.index_block[key_frag]
-
-    def keys(self):
-        return sorted(self.index_block.keys())
-
 def split_by_n(seq, n):
     while seq:
         yield seq[:n]
         seq = seq[n:]
 
 class LogIndex:
-    def __init__(self, log, root_offset):
+    def __init__(self, log):
         self.log = log
-        self.root = log.get(root_offset)
+        self.reset()
+
+    def reset(self):
+        self.root = self.log.get(self.log.read_checkpoint())
         self.in_memory_blocks = DirtyBlocks()
 
-    def walk(self, callback, internal_nodes=False):
+    def walk(self, callback):
         def rec_do(block, depth):
             for subkey in block.keys():
                 entry = block.get(subkey)
-                #print("    " * depth + subkey + ": " + str(entry))
                 if entry[2] == Type.NODE:
                     rec_do(self.log.get(entry[1]), depth + 1)
-                    if internal_nodes:
-                        callback(entry[0], entry[1])
                 elif entry[2] == Type.MEM_NODE:
                     rec_do(self.in_memory_blocks.get(entry[1]), depth + 1)
-                    if internal_nodes:
-                        callback(entry[0], entry[1])
                 elif entry[2] == Type.LEAF:
-                    callback(entry[0], entry[1])
+                    if entry[1] is not None:
+                        callback(entry[0], entry[1])
                 else:
-                    raise ValueError("Failure to walk structure")
+                    raise ValueError("Illegal element type.")
         return rec_do(self.root, 0)
-
 
     def put(self, key, value):
         block = self.root
@@ -148,7 +143,7 @@ class LogIndex:
                     self.put(key, value)
                     return
             else:
-                raise ValueError("Should not happen. Illegal element type.")
+                raise ValueError("Illegal element type.")
 
         # NODE is also LEAF
         block.put("", key, value, Type.LEAF)
@@ -159,27 +154,28 @@ class LogIndex:
             if block.has(subkey):
                 entry = block.get(subkey)
                 entry_type = entry[2]
-                if entry_type == Type.LEAF: # LEAF
-                    if entry[0] == key:
+                if entry_type == Type.LEAF:
+                    if entry[0] == key and entry[1] is not None:
                         return entry[1]
-                    raise KeyError(key + " not found")
-                elif entry_type == Type.NODE: # directory
+                    raise KeyError("Key '{}' not found".format(key))
+                elif entry_type == Type.NODE:
                     block_offset = block.get(subkey)
                     block = self.log.get(block_offset[1])
                 elif entry_type == Type.MEM_NODE:
                     block_offset = block.get(subkey)
                     block = self.in_memory_blocks.get(block_offset[1])
                 else:
-                    assert False
+                    raise ValueError("Illegal element type.")
             else:
-                raise KeyError(key + " not found")
+                raise KeyError("Key '{}' not found".format(key))
 
         # If NODE is also LEAF
         if block.has(""):
             entry = block.get("")
-            if entry[0] == key:
+            if entry[0] == key and entry[1] is not None:
                 return entry[1]
-        raise KeyError(key + " not found")
+
+        raise KeyError("Key '{}' not found".format(key))
 
     def commit(self):
         if not len(self.in_memory_blocks):
@@ -195,82 +191,80 @@ class LogIndex:
 
         root_offset = commit_rec(self.root)
         self.log.write_checkpoint(root_offset)
-        self.in_memory_blocks = DirtyBlocks()
-        assert self.log.read_checkpoint() == root_offset
-        return root_offset
+        self.reset()
 
-def main():
-    main_parser = argparse.ArgumentParser(description='Lodex database API.')
-    main_parser.add_argument(
-            "--db",
-            type=str,
-            default="database.ldx",
-            help="Database filename.")
-    sub_parsers = main_parser.add_subparsers(dest='operation')
-    put_parser = sub_parsers.add_parser("put")
-    put_parser.add_argument("key")
-    put_parser.add_argument("value")
-    get_parser = sub_parsers.add_parser("get")
-    get_parser.add_argument("key")
-    del_parser = sub_parsers.add_parser("delete")
-    del_parser.add_argument("key")
-    status_parser = sub_parsers.add_parser("status")
-    dump_parser = sub_parsers.add_parser("dump")
-    dump_parser.add_argument(
-            "--sep",
-            type=str,
-            default="\t",
-            help="key-value separator.")
-    load_parser = sub_parsers.add_parser("load")
-    load_parser.add_argument(
-            "--sep",
-            type=str,
-            default="\t",
-            help="key-value separator.")
 
-    args = main_parser.parse_args()
+db_parser = argparse.ArgumentParser(add_help=False)
+db_parser.add_argument(
+        "--db", type=str, default="database.ldx", metavar="path",
+        help="the database path (default 'database.ldx')")
+key_parser = argparse.ArgumentParser(add_help=False)
+key_parser.add_argument("key")
+value_parser = argparse.ArgumentParser(add_help=False)
+value_parser.add_argument("value")
+sep_parser = argparse.ArgumentParser(add_help=False)
+sep_parser.add_argument(
+        "--sep", type=str, default="\t",
+        help="key-value separator (default: '\\t')")
 
-    if args.db and args.operation:
-        log = FileLog(args.db)
-        index = LogIndex(log, log.read_checkpoint())
+parser = argparse.ArgumentParser(
+        description='An api interfacing a ldx database.')
+sub_parsers = parser.add_subparsers(dest="operation")
+_ = sub_parsers.add_parser(
+        "put", help="add key-value pair",
+        parents=[db_parser, key_parser, value_parser])
+_ = sub_parsers.add_parser(
+        "get", help="retrieve a value",
+        parents=[db_parser, key_parser])
+_ = sub_parsers.add_parser(
+        "delete", help="delete a value",
+        parents=[db_parser, key_parser])
+_ = sub_parsers.add_parser(
+        "stats", help="print database metrics",
+        parents=[db_parser])
+_ = sub_parsers.add_parser(
+        "dump", help="print key-values to stdout",
+        parents=[db_parser, sep_parser])
+_ = sub_parsers.add_parser(
+        "load", help="add key-value pairs from stdout",
+        parents=[db_parser, sep_parser])
 
+args = parser.parse_args()
+
+if args.operation:
+    log = FileLog(args.db)
+    index = LogIndex(log)
+    try:
         if args.operation == "put":
-            log_offset = log.put(args.value)
-            print(log_offset)
             index.put(args.key, log.put(args.value))
             index.commit()
         elif args.operation == "get":
-            try:
-                print(log.get(index.get(args.key)))
-            except KeyError:
-                sys.stderr.write("Unable to find item '{}'".format(args.key))
-                exit(-1)
+            print(log.get(index.get(args.key)))
         elif args.operation == "delete":
             index.put(args.key, None)
             index.commit()
-        elif args.operation == "status":
-            counter = 0
+        elif args.operation == "stats":
+            counter = [0]
             def item_counter(_1, _2):
-                counter += 1
+                counter[0] += 1
             index.walk(item_counter)
-            print("Stats for {}".format(log.filename))
-            print(" items: {}".format(counter))
-            print(" size: {}".format(len(log)))
+            print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
+                log.filename, counter[0], len(log)))
         elif args.operation == "dump":
+            sep = args.sep.encode("utf-8").decode("unicode_escape")
             def item_printer(key, value):
-                print("{}{}{}".format(key, args.sep, value))
+                print("{}{}{}".format(key, sep, log.get(value)))
             index.walk(item_printer)
         elif args.operation == "load":
-            try:
-                for line in sys.stdin.readline():
-                    key, value = line.split(args.sep)
-                    index.put(key, log.put(value))
-                index.commit()
-            except:
-                sys.stderr.write("Failed to load values.")
-                exit(-1)
+            sep = args.sep.encode("utf-8").decode("unicode_escape")
+            for line in sys.stdin.readline():
+                key, value = line.split(sep)
+                index.put(key, log.put(value))
+            index.commit()
+    except BaseException as e:
+        sys.stderr.write(repr(e))
+        exit(-1)
+    finally:
         log.close()
-
-if __name__ == "__main__":
-    main()
-
+else:
+    parser.print_help()
