@@ -72,7 +72,7 @@ class FileLog:
         self.file.write(length.to_bytes(4, byteorder="big"))
         self.file.write(value_bytes)
         return offset
-    
+
     def get(self, offset):
         self.file.seek(offset, 0)
         length = int.from_bytes(self.file.read(4), byteorder="big")
@@ -82,7 +82,7 @@ class FileLog:
     def __len__(self):
         self.file.seek(0, 2)
         return self.file.tell()
-    
+
     def close(self):
         self.file.close()
         self.file = None
@@ -258,7 +258,7 @@ if args.operation:
                 log.filename, counter[0], len(log)))
         elif args.operation == "dump":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
-            
+
             def item_printer(key, value):
                 print("{}{}{}".format(key, sep, log.get(value)))
             index.walk(item_printer)
