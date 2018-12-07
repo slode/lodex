@@ -1,7 +1,10 @@
 # lodex
 
-`lodex` is probably the simplest key-value datastore. Both the key-value pairs
-and the blocks of the trie based index are appended to the database file.
+`lodex` is probably the simplest key-value datastore. Key-value pairs are
+appended to the database file along with the blocks of the trie based index that
+keep track of where everything is. Only the first couple of bytes of the file are
+mutable, and this is where we keep the checkpoints. I keep two checkpoints for
+whatever reason.(?)
 
 ## Getting started
 
@@ -65,7 +68,15 @@ size:	201
 ## Todos
 
 I'm going to clean up the internal API so that you can use `lodex` in your
-python programs as well. At the moment, I've just worked on the CLI.
+python programs as well. At the moment, I've just worked on the command line
+interface.
+
+I'm also going to add some error checking to be able to truncate the database
+in case of aborted transactions.
+
+Also, write access needs to be locked down. There are several ways of doing this,
+but I need to figure out which way is simplest. `lodex` is all about being
+simplest.
 
 ## Contributing
 
@@ -83,4 +94,5 @@ Stian Lode [github](https://github.com/slode)
 
 # License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
+`lodex` is licensed under the MIT License - see the [LICENSE.md](LICENSE.md)
+file for details
