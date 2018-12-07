@@ -263,7 +263,7 @@ if args.operation:
             index.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
-        exit(-1)
+        exit(127)
     finally:
         log.close()
 else:
