@@ -257,9 +257,9 @@ if args.operation:
             index.walk(item_printer)
         elif args.operation == "load":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
-            for line in sys.stdin.readline():
+            for line in sys.stdin:
                 key, value = line.split(sep)
-                index.put(key, log.put(value))
+                index.put(key, log.put(value.rstrip()))
             index.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
