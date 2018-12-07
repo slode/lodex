@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-lodex=./lodex.py
+lodex=./lodex
 
 assertEqual()
 {
