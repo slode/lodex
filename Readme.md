@@ -1,11 +1,11 @@
 # lodex
 
-`lodex` is probably the simplest key-value datastore. Key-value pairs are
-appended to the database file along with the blocks of the trie-based index that
-keep track of where everything is. Only the first couple of bytes of the file are
-mutable, and this is where we keep the checkpoints. `lodex` keeps two
-checkpoints, which might seem meaningless at the moment, but might make more
-sense in the future.
+`lodex` is probably the simplest key-value datastore. `lodex` appends key-value pairs
+to the database file, along with the blocks of the trie-based index. The index
+keeps track of where everything is. Only the first couple of bytes of the
+database file are mutable and this is where we keep the checkpoints. `lodex`
+keeps two checkpoints, which might seem meaningless at the moment but might
+make more sense in the future.
 
 ## Getting started
 
@@ -82,7 +82,9 @@ aborted. Which is fine, but not optimal.
 
 Also, write access needs to be locked down. There are several ways of doing this,
 but I need to figure out which way is simplest. `lodex` is all about being
-simplest.
+simplest. The basic design allows for a single writer and multiple readers.
+
+Having multiple writers is a no-go, and this is what needs to be handled.
 
 ## Contributing
 
