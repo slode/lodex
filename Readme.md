@@ -1,16 +1,16 @@
 # lodex
 
 `lodex` is probably the simplest key-value datastore. Key-value pairs are
-appended to the database file along with the blocks of the trie based index that
+appended to the database file along with the blocks of the trie-based index that
 keep track of where everything is. Only the first couple of bytes of the file are
-mutable, and this is where we keep the checkpoints. I keep two checkpoints for
-whatever reason.(?)
+mutable, and this is where we keep the checkpoints. (I keep two checkpoints for
+whatever reason..?)
 
 ## Getting started
 
 Install `lodex` by adding it to your path. [python3](https://www.python.org) is a prerequisite.
 
-```
+```bash
 cp lodex ~/bin
 ```
 
@@ -18,7 +18,8 @@ cp lodex ~/bin
 
 Call test_lodex.sh to run the tests.
 
-```
+```bash
+❯ sh test_lodex.sh
 Testing lodex database CLI
 ok: "testvalue == testvalue"
 ok: "0 == 0"
@@ -34,6 +35,7 @@ ok: "testkey:testvalue, == testkey:testvalue,"
 ok: "127 == 127"
 ok: "127 == 127"
 ok: "testkey:testvalue, == testkey:testvalue,"
+
 ```
 
 ## Usage
@@ -41,7 +43,7 @@ ok: "testkey:testvalue, == testkey:testvalue,"
 `lodex` comes with six basic operations, `put`, `get`, `delete`, `stats`, `dump`,
 and `load`. If no database path is specified, `lodex` will use `./database.ldx`.
 
-```
+```bash
 ❯ lodex put mykey myvalue
 ❯ lodex get mykey
 myvalue
@@ -58,7 +60,7 @@ db:	database.ldx
 items:	0
 size:	312
 
-❯ ./lodex stats --db database2.ldx 
+❯ lodex stats --db database2.ldx 
 db:	database2.ldx
 items:	1
 size:	201
