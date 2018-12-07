@@ -5,7 +5,7 @@ and the blocks of the trie based index are appended to the database file.
 
 ## Getting started
 
-Install lodex by adding lodex to your path. [python3](https://www.python.org) is a prerequisite.
+Install `lodex` by adding it to your path. [python3](https://www.python.org) is a prerequisite.
 
 ```
 cp lodex ~/bin
@@ -35,8 +35,8 @@ ok: "testkey:testvalue, == testkey:testvalue,"
 
 ## Usage
 
-lodex comes with six basic operations, `put`, `get`, `delete`, `stats`, `dump`,
-and `load`. If no database path is specified, lodex will use `./database.ldx`.
+`lodex` comes with six basic operations, `put`, `get`, `delete`, `stats`, `dump`,
+and `load`. If no database path is specified, `lodex` will use `./database.ldx`.
 
 ```
 ❯ lodex put mykey myvalue
@@ -61,6 +61,11 @@ items:	1
 size:	201
 
 ```
+
+## Todos
+
+I'm going to clean up the internal API so that you can use `lodex` in your
+python programs as well. At the moment, I've just worked on the CLI.
 
 ## Contributing
 
