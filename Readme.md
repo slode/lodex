@@ -11,7 +11,7 @@ whatever reason..?)
 Install `lodex` by adding it to your path. [python3](https://www.python.org) is a prerequisite.
 
 ```bash
-cp lodex ~/bin
+❯ cp lodex ~/bin
 ```
 
 ## Running the tests
