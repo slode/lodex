@@ -114,8 +114,8 @@ class LogIndex:
                 elif entry[1] == Type.LEAF:
                     record = self.log.get(entry[0])
 
-                    if record["value"] is not None:
-                        callback(record["key"], record["value"])
+                    if record[1] is not None:
+                        callback(record[0], record[1])
                 else:
                     raise ValueError("Illegal element type.")
         return rec_do(self.root, 0)
@@ -140,14 +140,14 @@ class LogIndex:
             elif block.get(subkey)[1] == Type.LEAF:
                 old_entry = block.get(subkey)
                 old_record = self.log.get(old_entry[0])
-                if old_record["key"] == key:
+                if old_record[0] == key:
                     block.put(subkey, value, Type.LEAF)
                     return
                 else:
                     new_block = IndexBlock()
                     index = self.in_memory_blocks.put(new_block)
                     block.put(subkey, index, Type.MEM_NODE)
-                    self.put(old_record["key"], old_entry[0])
+                    self.put(old_record[0], old_entry[0])
                     self.put(key, value)
                     return
             else:
@@ -164,7 +164,7 @@ class LogIndex:
                 entry_type = entry[1]
                 if entry_type == Type.LEAF:
                     record = self.log.get(entry[0])
-                    if record["key"] == key and entry[0] is not None:
+                    if record[0] == key and entry[0] is not None:
                         return entry[0]
                     raise KeyError("Key '{}' not found".format(key))
                 elif entry_type == Type.NODE:
@@ -182,7 +182,7 @@ class LogIndex:
         if block.has(""):
             entry = block.get("")
             record = self.log.get(entry[0])
-            if record["key"] == key and entry[0] is not None:
+            if record[0] == key and entry[0] is not None:
                 return entry[0]
 
         raise KeyError("Key '{}' not found".format(key))
@@ -210,14 +210,14 @@ class Lodex:
         self.index = LogIndex(self.log)
 
     def put(self, key, value):
-        offset = self.log.put({"key": key, "value": value})
+        offset = self.log.put([key, value])
         self.index.put(key, offset)
 
     def get(self, key):
         offset = self.index.get(key)
         record = self.log.get(offset)
-        if record["value"] is not None:
-            return record["value"]
+        if record[1] is not None:
+            return record[1]
         raise KeyError("Key '{}' not found".format(key))
 
     def walk(self, cb):
