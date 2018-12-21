@@ -30,8 +30,8 @@ class IndexBlock:
     def has(self, key_frag):
         return key_frag in self.index_block
 
-    def put(self, key_frag, key, value, typ):
-        self.index_block[key_frag] = (key, value, typ)
+    def put(self, key_frag, value, typ):
+        self.index_block[key_frag] = (value, typ)
 
     def get(self, key_frag):
         return self.index_block[key_frag]
@@ -107,13 +107,15 @@ class LogIndex:
         def rec_do(block, depth):
             for subkey in block.keys():
                 entry = block.get(subkey)
-                if entry[2] == Type.NODE:
-                    rec_do(self.log.get(entry[1]), depth + 1)
-                elif entry[2] == Type.MEM_NODE:
-                    rec_do(self.in_memory_blocks.get(entry[1]), depth + 1)
-                elif entry[2] == Type.LEAF:
-                    if entry[1] is not None:
-                        callback(entry[0], entry[1])
+                if entry[1] == Type.NODE:
+                    rec_do(self.log.get(entry[0]), depth + 1)
+                elif entry[1] == Type.MEM_NODE:
+                    rec_do(self.in_memory_blocks.get(entry[0]), depth + 1)
+                elif entry[1] == Type.LEAF:
+                    record = self.log.get(entry[0])
+
+                    if record["value"] is not None:
+                        callback(record["key"], record["value"])
                 else:
                     raise ValueError("Illegal element type.")
         return rec_do(self.root, 0)
@@ -123,28 +125,29 @@ class LogIndex:
         self.in_memory_blocks.put(block)
         for subkey in split_by_n(key, 2):
             if block.has(subkey) is False:
-                block.put(subkey, key, value, Type.LEAF)
+                block.put(subkey, value, Type.LEAF)
                 return
-            elif block.get(subkey)[2] == Type.NODE:
-                child_block = self.log.get(block.get(subkey)[1])
+            elif block.get(subkey)[1] == Type.NODE:
+                child_block = self.log.get(block.get(subkey)[0])
                 child_block_index = self.in_memory_blocks.put(child_block)
-                block.put(subkey, None, child_block_index, Type.MEM_NODE)
+                block.put(subkey, child_block_index, Type.MEM_NODE)
                 block = child_block
                 continue
-            elif block.get(subkey)[2] == Type.MEM_NODE:
-                child_block = self.in_memory_blocks.get(block.get(subkey)[1])
+            elif block.get(subkey)[1] == Type.MEM_NODE:
+                child_block = self.in_memory_blocks.get(block.get(subkey)[0])
                 block = child_block
                 continue
-            elif block.get(subkey)[2] == Type.LEAF:
+            elif block.get(subkey)[1] == Type.LEAF:
                 old_entry = block.get(subkey)
-                if old_entry[0] == key:
-                    block.put(subkey, key, value, Type.LEAF)
+                old_record = self.log.get(old_entry[0])
+                if old_record["key"] == key:
+                    block.put(subkey, value, Type.LEAF)
                     return
                 else:
                     new_block = IndexBlock()
                     index = self.in_memory_blocks.put(new_block)
-                    block.put(subkey, None, index, Type.MEM_NODE)
-                    self.put(old_entry[0], old_entry[1])
+                    block.put(subkey, index, Type.MEM_NODE)
+                    self.put(old_record["key"], old_entry[0])
                     self.put(key, value)
                     return
             else:
@@ -158,17 +161,18 @@ class LogIndex:
         for subkey in split_by_n(key, 2):
             if block.has(subkey):
                 entry = block.get(subkey)
-                entry_type = entry[2]
+                entry_type = entry[1]
                 if entry_type == Type.LEAF:
-                    if entry[0] == key and entry[1] is not None:
-                        return entry[1]
+                    record = self.log.get(entry[0])
+                    if record["key"] == key and entry[0] is not None:
+                        return entry[0]
                     raise KeyError("Key '{}' not found".format(key))
                 elif entry_type == Type.NODE:
                     block_offset = block.get(subkey)
-                    block = self.log.get(block_offset[1])
+                    block = self.log.get(block_offset[0])
                 elif entry_type == Type.MEM_NODE:
                     block_offset = block.get(subkey)
-                    block = self.in_memory_blocks.get(block_offset[1])
+                    block = self.in_memory_blocks.get(block_offset[0])
                 else:
                     raise ValueError("Illegal element type.")
             else:
@@ -177,8 +181,9 @@ class LogIndex:
         # If NODE is also LEAF
         if block.has(""):
             entry = block.get("")
-            if entry[0] == key and entry[1] is not None:
-                return entry[1]
+            record = self.log.get(entry[0])
+            if record["key"] == key and entry[0] is not None:
+                return entry[0]
 
         raise KeyError("Key '{}' not found".format(key))
 
@@ -189,15 +194,43 @@ class LogIndex:
         def commit_rec(block):
             for subkey in block.keys():
                 entry = block.get(subkey)
-                if entry[2] == Type.MEM_NODE:
-                    block_id = commit_rec(self.in_memory_blocks.get(entry[1]))
-                    block.put(subkey, entry[0], block_id, Type.NODE)
+                if entry[1] == Type.MEM_NODE:
+                    block_id = commit_rec(self.in_memory_blocks.get(entry[0]))
+                    block.put(subkey, block_id, Type.NODE)
             return self.log.put(block)
 
         root_offset = commit_rec(self.root)
         self.log.write_checkpoint(root_offset)
         self.reset()
 
+class Lodex:
+    def __init__(self, filename="database.ldx"):
+        self.filename = filename
+        self.log = FileLog(filename)
+        self.index = LogIndex(self.log)
+
+    def put(self, key, value):
+        offset = self.log.put({"key": key, "value": value})
+        self.index.put(key, offset)
+
+    def get(self, key):
+        offset = self.index.get(key)
+        record = self.log.get(offset)
+        if record["value"] is not None:
+            return record["value"]
+        raise KeyError("Key '{}' not found".format(key))
+
+    def walk(self, cb):
+        self.index.walk(cb)
+
+    def commit(self):
+        self.index.commit()
+
+    def __len__(self):
+        return len(self.log)
+
+    def close(self):
+        self.log.close()
 
 db_parser = argparse.ArgumentParser(add_help=False)
 db_parser.add_argument(
@@ -237,42 +270,41 @@ _ = sub_parsers.add_parser(
 args = parser.parse_args()
 
 if args.operation:
-    log = FileLog(args.db)
-    index = LogIndex(log)
+    db = Lodex(args.db)
     try:
         if args.operation == "put":
-            index.put(args.key, log.put(args.value))
-            index.commit()
+            db.put(args.key, args.value)
+            db.commit()
         elif args.operation == "get":
-            print(log.get(index.get(args.key)))
+            print(db.get(args.key))
         elif args.operation == "delete":
-            index.put(args.key, None)
-            index.commit()
+            db.put(args.key, None)
+            db.commit()
         elif args.operation == "stats":
             counter = [0]
 
             def item_counter(_1, _2):
                 counter[0] += 1
-            index.walk(item_counter)
+            db.walk(item_counter)
             print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
-                log.filename, counter[0], len(log)))
+                db.filename, counter[0], len(db)))
         elif args.operation == "dump":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
 
             def item_printer(key, value):
-                print("{}{}{}".format(key, sep, log.get(value)))
-            index.walk(item_printer)
+                print("{}{}{}".format(key, sep, value))
+            db.walk(item_printer)
         elif args.operation == "load":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
             for line in sys.stdin:
                 key, value = line.split(sep)
-                index.put(key, log.put(value.rstrip()))
-            index.commit()
+                db.put(key, value.rstrip())
+            db.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
         exit(127)
     finally:
-        log.close()
+        db.close()
 else:
     parser.print_help()
 
