@@ -114,11 +114,10 @@ class LogIndex:
                     rec_do(self.log.get(entry[0]), depth + 1)
                 elif entry[1] == 2:
                     rec_do(self.in_memory_blocks.get(entry[0]), depth + 1)
-                elif entry[1] == 0:
+                elif entry[1] == 0 and entry[0] is not None:
                     record = self.value_log.get(entry[0])
-
-                    if record is not None and record[1] is not None:
-                        callback(record[0], record[1])
+                    if record["value"] is not None:
+                        callback(record)
                 else:
                     raise ValueError("Illegal element type.")
         return rec_do(self.root, 0)
@@ -143,14 +142,14 @@ class LogIndex:
             elif block.get(subkey)[1] == 0:
                 old_entry = block.get(subkey)
                 old_record = self.value_log.get(old_entry[0])
-                if old_record[0] == key:
+                if old_record[self.index_key] == key:
                     block.put(subkey, value, 0)
                     return
                 else:
                     new_block = IndexBlock()
                     index = self.in_memory_blocks.put(new_block)
                     block.put(subkey, index, 2)
-                    self.put(old_record[0], old_entry[0])
+                    self.put(old_record[self.index_key], old_entry[0])
                     self.put(key, value)
                     return
             else:
@@ -167,7 +166,7 @@ class LogIndex:
                 entry_type = entry[1]
                 if entry_type == 0:
                     record = self.value_log.get(entry[0])
-                    if record[0] == key and entry[0] is not None:
+                    if record[self.index_key] == key and entry[0] is not None:
                         return entry[0]
                     raise KeyError("Key '{}' not found".format(key))
                 elif entry_type == 1:
@@ -185,7 +184,7 @@ class LogIndex:
         if block.has(""):
             entry = block.get("")
             record = self.value_log.get(entry[0])
-            if record[0] == key and entry[0] is not None:
+            if record[self.index_key] == key and entry[0] is not None:
                 return entry[0]
 
         raise KeyError("Key '{}' not found".format(key))
@@ -214,14 +213,15 @@ class Lodex:
         self.index = LogIndex(self.index_log, self.log)
 
     def put(self, key, value):
-        offset = self.log.put([key, value])
+        offset = self.log.put({"_id": key, "value": value})
         self.index.put(key, offset)
+        return key
 
     def get(self, key):
         offset = self.index.get(key)
         record = self.log.get(offset)
-        if record[1] is not None:
-            return record[1]
+        if record["value"] is not None:
+            return record["value"]
         raise KeyError("Key '{}' not found".format(key))
 
     def walk(self, cb):
@@ -287,7 +287,7 @@ if args.operation:
         elif args.operation == "stats":
             counter = [0]
 
-            def item_counter(_1, _2):
+            def item_counter(_1):
                 counter[0] += 1
             db.walk(item_counter)
             print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
@@ -295,8 +295,8 @@ if args.operation:
         elif args.operation == "dump":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
 
-            def item_printer(key, value):
-                print("{}{}{}".format(key, sep, value))
+            def item_printer(doc):
+                print("{}{}{}".format(doc["_id"], sep, doc["value"]))
             db.walk(item_printer)
         elif args.operation == "load":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
