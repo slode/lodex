@@ -4,6 +4,7 @@ import argparse
 import pickle
 import cbor
 import sys
+import uuid
 
 from enum import Enum
 Type = Enum("Type", "LEAF NODE MEM_NODE")
@@ -96,10 +97,10 @@ def split_by_n(seq, n):
 
 
 class LogIndex:
-    def __init__(self, log, value_log):
+    def __init__(self, log, value_log, key="_id"):
         self.log = log
         self.value_log = value_log
-        self.index_key = "_id"
+        self.index_key = key
         self.reset()
 
     def reset(self):
@@ -118,8 +119,6 @@ class LogIndex:
                     record = self.value_log.get(entry[0])
                     if record["value"] is not None:
                         callback(record)
-                else:
-                    raise ValueError("Illegal element type.")
         return rec_do(self.root, 0)
 
     def put(self, key, value):
@@ -210,19 +209,23 @@ class Lodex:
         self.filename = filename
         self.log = FileLog(filename)
         self.index_log = FileLog(filename+".idx")
-        self.index = LogIndex(self.index_log, self.log)
+        self.index = LogIndex(self.index_log, self.log, key="_id")
 
-    def put(self, key, value):
-        offset = self.log.put({"_id": key, "value": value})
-        self.index.put(key, offset)
-        return key
+    def put(self, doc):
+        offset = self.log.put(doc)
+        if "_id" not in doc:
+            doc["_id"] = uuid.uuid4()
+        self.index.put(doc["_id"], offset)
+        return doc["_id"]
 
-    def get(self, key):
-        offset = self.index.get(key)
-        record = self.log.get(offset)
-        if record["value"] is not None:
-            return record["value"]
-        raise KeyError("Key '{}' not found".format(key))
+    def get(self, doc):
+        offset = self.index.get(doc["_id"])
+        if offset is None:
+            raise KeyError("Key '{}' not found".format(key))
+        return self.log.get(offset)
+
+    def delete(self, doc):
+        self.index.put(doc["_id"], None)
 
     def walk(self, cb):
         self.index.walk(cb)
@@ -277,12 +280,13 @@ if args.operation:
     db = Lodex(args.db)
     try:
         if args.operation == "put":
-            db.put(args.key, args.value)
+            db.put({"_id": args.key, "value": args.value})
             db.commit()
         elif args.operation == "get":
-            print(db.get(args.key))
+            doc = db.get({"_id": args.key})
+            print(doc["value"])
         elif args.operation == "delete":
-            db.put(args.key, None)
+            db.delete({"_id": args.key})
             db.commit()
         elif args.operation == "stats":
             counter = [0]
@@ -302,7 +306,7 @@ if args.operation:
             sep = args.sep.encode("utf-8").decode("unicode_escape")
             for line in sys.stdin:
                 key, value = line.split(sep)
-                db.put(key, value.rstrip())
+                db.put({"_id": key, "value": value.rstrip()})
             db.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
