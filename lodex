@@ -2,6 +2,7 @@
 
 import argparse
 import pickle
+import cbor
 import sys
 
 from enum import Enum
@@ -24,8 +25,8 @@ class DirtyBlocks:
 
 
 class IndexBlock:
-    def __init__(self):
-        self.index_block = {}
+    def __init__(self, index_block=None):
+        self.index_block = index_block if index_block is not None else {}
 
     def has(self, key_frag):
         return key_frag in self.index_block
@@ -50,7 +51,7 @@ class FileLog:
 
         if len(self) == 0:
             self.write_checkpoint(0)
-            self.write_checkpoint(self.put(IndexBlock()))
+            self.write_checkpoint(self.put(IndexBlock().index_block))
 
     def write_checkpoint(self, offset):
         self.file.seek(0, 0)
@@ -67,17 +68,17 @@ class FileLog:
 
     def put(self, value):
         offset = len(self)
-        value_bytes = pickle.dumps(value)
+        value_bytes = cbor.dumps(value)
         length = len(value_bytes)
-        self.file.write(length.to_bytes(4, byteorder="big"))
+        self.file.write(length.to_bytes(2, byteorder="big"))
         self.file.write(value_bytes)
         return offset
 
     def get(self, offset):
         self.file.seek(offset, 0)
-        length = int.from_bytes(self.file.read(4), byteorder="big")
+        length = int.from_bytes(self.file.read(2), byteorder="big")
         value_bytes = self.file.read(length)
-        return pickle.loads(value_bytes)
+        return cbor.loads(value_bytes) if value_bytes else None
 
     def __len__(self):
         self.file.seek(0, 2)
@@ -95,26 +96,28 @@ def split_by_n(seq, n):
 
 
 class LogIndex:
-    def __init__(self, log):
+    def __init__(self, log, value_log):
         self.log = log
+        self.value_log = value_log
+        self.index_key = "_id"
         self.reset()
 
     def reset(self):
-        self.root = self.log.get(self.log.read_checkpoint())
+        self.root = IndexBlock(index_block=self.log.get(self.log.read_checkpoint()))
         self.in_memory_blocks = DirtyBlocks()
 
     def walk(self, callback):
         def rec_do(block, depth):
             for subkey in block.keys():
                 entry = block.get(subkey)
-                if entry[1] == Type.NODE:
+                if entry[1] == 1:
                     rec_do(self.log.get(entry[0]), depth + 1)
-                elif entry[1] == Type.MEM_NODE:
+                elif entry[1] == 2:
                     rec_do(self.in_memory_blocks.get(entry[0]), depth + 1)
-                elif entry[1] == Type.LEAF:
-                    record = self.log.get(entry[0])
+                elif entry[1] == 0:
+                    record = self.value_log.get(entry[0])
 
-                    if record[1] is not None:
+                    if record is not None and record[1] is not None:
                         callback(record[0], record[1])
                 else:
                     raise ValueError("Illegal element type.")
@@ -125,28 +128,28 @@ class LogIndex:
         self.in_memory_blocks.put(block)
         for subkey in split_by_n(key, 2):
             if block.has(subkey) is False:
-                block.put(subkey, value, Type.LEAF)
+                block.put(subkey, value, 0)
                 return
-            elif block.get(subkey)[1] == Type.NODE:
-                child_block = self.log.get(block.get(subkey)[0])
+            elif block.get(subkey)[1] == 1:
+                child_block = IndexBlock(index_block=self.log.get(block.get(subkey)[0]))
                 child_block_index = self.in_memory_blocks.put(child_block)
-                block.put(subkey, child_block_index, Type.MEM_NODE)
+                block.put(subkey, child_block_index, 2)
                 block = child_block
                 continue
-            elif block.get(subkey)[1] == Type.MEM_NODE:
+            elif block.get(subkey)[1] == 2:
                 child_block = self.in_memory_blocks.get(block.get(subkey)[0])
                 block = child_block
                 continue
-            elif block.get(subkey)[1] == Type.LEAF:
+            elif block.get(subkey)[1] == 0:
                 old_entry = block.get(subkey)
-                old_record = self.log.get(old_entry[0])
+                old_record = self.value_log.get(old_entry[0])
                 if old_record[0] == key:
-                    block.put(subkey, value, Type.LEAF)
+                    block.put(subkey, value, 0)
                     return
                 else:
                     new_block = IndexBlock()
                     index = self.in_memory_blocks.put(new_block)
-                    block.put(subkey, index, Type.MEM_NODE)
+                    block.put(subkey, index, 2)
                     self.put(old_record[0], old_entry[0])
                     self.put(key, value)
                     return
@@ -154,7 +157,7 @@ class LogIndex:
                 raise ValueError("Illegal element type.")
 
         # NODE is also LEAF
-        block.put("", key, value, Type.LEAF)
+        block.put("", value, 0)
 
     def get(self, key):
         block = self.root
@@ -162,15 +165,15 @@ class LogIndex:
             if block.has(subkey):
                 entry = block.get(subkey)
                 entry_type = entry[1]
-                if entry_type == Type.LEAF:
-                    record = self.log.get(entry[0])
+                if entry_type == 0:
+                    record = self.value_log.get(entry[0])
                     if record[0] == key and entry[0] is not None:
                         return entry[0]
                     raise KeyError("Key '{}' not found".format(key))
-                elif entry_type == Type.NODE:
+                elif entry_type == 1:
                     block_offset = block.get(subkey)
-                    block = self.log.get(block_offset[0])
-                elif entry_type == Type.MEM_NODE:
+                    block = IndexBlock(index_block=self.log.get(block_offset[0]))
+                elif entry_type == 2:
                     block_offset = block.get(subkey)
                     block = self.in_memory_blocks.get(block_offset[0])
                 else:
@@ -181,7 +184,7 @@ class LogIndex:
         # If NODE is also LEAF
         if block.has(""):
             entry = block.get("")
-            record = self.log.get(entry[0])
+            record = self.value_log.get(entry[0])
             if record[0] == key and entry[0] is not None:
                 return entry[0]
 
@@ -194,10 +197,10 @@ class LogIndex:
         def commit_rec(block):
             for subkey in block.keys():
                 entry = block.get(subkey)
-                if entry[1] == Type.MEM_NODE:
+                if entry[1] == 2:
                     block_id = commit_rec(self.in_memory_blocks.get(entry[0]))
-                    block.put(subkey, block_id, Type.NODE)
-            return self.log.put(block)
+                    block.put(subkey, block_id, 1)
+            return self.log.put(block.index_block)
 
         root_offset = commit_rec(self.root)
         self.log.write_checkpoint(root_offset)
@@ -207,7 +210,8 @@ class Lodex:
     def __init__(self, filename="database.ldx"):
         self.filename = filename
         self.log = FileLog(filename)
-        self.index = LogIndex(self.log)
+        self.index_log = FileLog(filename+".idx")
+        self.index = LogIndex(self.index_log, self.log)
 
     def put(self, key, value):
         offset = self.log.put([key, value])

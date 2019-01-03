@@ -20,6 +20,7 @@ assertEqual()
 }
 
 rm -f database.ldx database2.ldx
+rm -f database.ldx.idx database2.ldx.idx
 
 echo "Testing lodex database CLI"
 
