@@ -128,19 +128,20 @@ class LogIndex:
             if block.has(subkey) is False:
                 block.put(subkey, value, 0)
                 return
-            elif block.get(subkey)[1] == 1:
-                child_block = IndexBlock(index_block=self.log.get(block.get(subkey)[0]))
+            
+            entry = block.get(subkey)
+            if entry[1] == 1:
+                child_block = IndexBlock(index_block=self.log.get(entry[0]))
                 child_block_index = self.in_memory_blocks.put(child_block)
                 block.put(subkey, child_block_index, 2)
                 block = child_block
                 continue
-            elif block.get(subkey)[1] == 2:
-                child_block = self.in_memory_blocks.get(block.get(subkey)[0])
+            elif entry[1] == 2:
+                child_block = self.in_memory_blocks.get(entry[0])
                 block = child_block
                 continue
-            elif block.get(subkey)[1] == 0:
-                old_entry = block.get(subkey)
-                old_record = self.value_log.get(old_entry[0])
+            elif entry[1] == 0:
+                old_record = self.value_log.get(entry[0])
                 if old_record[self.index_key] == key:
                     block.put(subkey, value, 0)
                     return
@@ -148,7 +149,7 @@ class LogIndex:
                     new_block = IndexBlock()
                     index = self.in_memory_blocks.put(new_block)
                     block.put(subkey, index, 2)
-                    self.put(old_record[self.index_key], old_entry[0])
+                    self.put(old_record[self.index_key], entry[0])
                     self.put(key, value)
                     return
             else:
@@ -169,11 +170,9 @@ class LogIndex:
                         return entry[0]
                     raise KeyError("Key '{}' not found".format(key))
                 elif entry_type == 1:
-                    block_offset = block.get(subkey)
-                    block = IndexBlock(index_block=self.log.get(block_offset[0]))
+                    block = IndexBlock(index_block=self.log.get(entry[0]))
                 elif entry_type == 2:
-                    block_offset = block.get(subkey)
-                    block = self.in_memory_blocks.get(block_offset[0])
+                    block = self.in_memory_blocks.get(entry[0])
                 else:
                     raise ValueError("Illegal element type.")
             else:
