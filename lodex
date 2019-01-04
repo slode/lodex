@@ -4,11 +4,6 @@ import argparse
 import pickle
 import cbor
 import sys
-import uuid
-
-from enum import Enum
-Type = Enum("Type", "LEAF NODE MEM_NODE")
-
 
 class DirtyBlocks:
     def __init__(self):
@@ -134,17 +129,7 @@ class LogIndex:
                 return
             
             entry = block.get(subkey)
-            if entry[1] == 1:
-                child_block = IndexBlock(index_block=self.log.get(entry[0]))
-                child_block_index = self.in_memory_blocks.put(child_block)
-                block.put(subkey, child_block_index, 2)
-                block = child_block
-                continue
-            elif entry[1] == 2:
-                child_block = self.in_memory_blocks.get(entry[0])
-                block = child_block
-                continue
-            elif entry[1] == 0:
+            if entry[1] == 0:
                 old_record = self.value_log.get(entry[0])
                 if old_record[self.index_key] == key:
                     block.put(subkey, value, 0)
@@ -156,6 +141,16 @@ class LogIndex:
                     self.put(old_record[self.index_key], entry[0])
                     self.put(key, value)
                     return
+            elif entry[1] == 1:
+                child_block = IndexBlock(index_block=self.log.get(entry[0]))
+                child_block_index = self.in_memory_blocks.put(child_block)
+                block.put(subkey, child_block_index, 2)
+                block = child_block
+                continue
+            elif entry[1] == 2:
+                child_block = self.in_memory_blocks.get(entry[0])
+                block = child_block
+                continue
             else:
                 raise ValueError("Illegal element type.")
 
@@ -215,9 +210,10 @@ class Lodex:
         self.index = LogIndex(self.index_log, self.log, key="_id")
 
     def put(self, doc):
-        offset = self.log.put(doc)
         if "_id" not in doc:
+            import uuid
             doc["_id"] = uuid.uuid4()
+        offset = self.log.put(doc)
         self.index.put(doc["_id"], offset)
         return doc["_id"]
 
