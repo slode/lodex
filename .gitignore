@@ -1,4 +1,4 @@
-*.ldx
+*.ldx*
 *.idx
 *.csv
 __pycache__
