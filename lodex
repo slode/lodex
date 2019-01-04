@@ -112,7 +112,7 @@ class LogIndex:
             for subkey in block.keys():
                 entry = block.get(subkey)
                 if entry[1] == 1:
-                    rec_do(self.log.get(entry[0]), depth + 1)
+                    rec_do(IndexBlock(index_block=self.log.get(entry[0])), depth + 1)
                 elif entry[1] == 2:
                     rec_do(self.in_memory_blocks.get(entry[0]), depth + 1)
                 elif entry[1] == 0 and entry[0] is not None:
