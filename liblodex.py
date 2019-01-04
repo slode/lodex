@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import argparse
 import cbor
 import sys
+import os
 
 class DirtyBlocks:
     def __init__(self):
@@ -91,8 +91,8 @@ def split_by_n(seq, n):
 
 
 class LogIndex:
-    def __init__(self, log, value_log, key="_id"):
-        self.log = log
+    def __init__(self, filename, value_log, key="_id"):
+        self.log = FileLog(filename+"."+key)
         self.value_log = value_log
         self.index_key = key
         self.reset()
@@ -111,8 +111,7 @@ class LogIndex:
                     rec_do(self.in_memory_blocks.get(entry[0]), depth + 1)
                 elif entry[1] == 0 and entry[0] is not None:
                     record = self.value_log.get(entry[0])
-                    if record["value"] is not None:
-                        callback(record)
+                    callback(record)
         return rec_do(self.root, 0)
 
     def put(self, key, value):
@@ -125,6 +124,9 @@ class LogIndex:
             
             entry = block.get(subkey)
             if entry[1] == 0:
+                if entry[0] is None:
+                    block.put(subkey, value, 0)
+                    return
                 old_record = self.value_log.get(entry[0])
                 if old_record[self.index_key] == key:
                     block.put(subkey, value, 0)
@@ -196,31 +198,44 @@ class LogIndex:
 
 class Lodex:
     def __init__(self, filename="database.ldx"):
-        self.filename = filename
-        self.log = FileLog(filename)
-        self.index_log = FileLog(filename+".idx")
-        self.index = LogIndex(self.index_log, self.log, key="_id")
+        self.filename = os.path.realpath(filename)
+        self.log = FileLog(self.filename)
+        self.indices = {}
+        self.add_index("_id")
+        for p in os.listdir(os.path.dirname(self.filename)):
+            if p.startswith(filename+"."):
+                self.add_index(os.path.splitext(p)[1][1:])
+
+    def add_index(self, key):
+        self.indices[key]= LogIndex(self.filename, self.log, key=key)
 
     def put(self, doc):
         if "_id" not in doc:
             import uuid
-            doc["_id"] = uuid.uuid4()
+            doc["_id"] = uuid.uuid4().hex
         offset = self.log.put(doc)
-        self.index.put(doc["_id"], offset)
+        for index_key in self.indices:
+            if index_key in doc:
+                self.indices[index_key].put(doc[index_key], offset)
         return doc["_id"]
 
     def get(self, doc):
-        offset = self.index.get(doc["_id"])
+        for index_key in self.indices:
+            if index_key in doc:
+                offset = self.indices[index_key].get(doc[index_key])
         return self.log.get(offset)
 
     def delete(self, doc):
-        self.index.put(doc["_id"], None)
+        for index_key in self.indices:
+            if index_key in doc:
+                offset = self.indices[index_key].put(doc[index_key], None)
 
     def walk(self, cb):
-        self.index.walk(cb)
+        self.indices["_id"].walk(cb)
 
     def commit(self):
-        self.index.commit()
+        for index_key in self.indices:
+            self.indices[index_key].commit()
 
     def __len__(self):
         return len(self.log)

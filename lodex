@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-import cbor
+import json
 import sys
 from liblodex import Lodex
 
@@ -50,7 +50,7 @@ if args.operation:
             db.commit()
         elif args.operation == "get":
             doc = db.get({"_id": args.key})
-            print(doc["value"])
+            print(doc)
         elif args.operation == "delete":
             db.delete({"_id": args.key})
             db.commit()
@@ -66,15 +66,16 @@ if args.operation:
             sep = args.sep.encode("utf-8").decode("unicode_escape")
 
             def item_printer(doc):
-                print("{}{}{}".format(doc["_id"], sep, doc["value"]))
+                print(doc)
+                #print("{}{}{}".format(doc["_id"], sep, doc["value"]))
             db.walk(item_printer)
         elif args.operation == "load":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
             for line in sys.stdin:
-                key, value = line.split(sep)
-                db.put({"_id": key, "value": value.rstrip()})
+                db.put(line)
             db.commit()
     except BaseException as e:
+        raise
         sys.stderr.write(repr(e))
         exit(1)
     finally:
