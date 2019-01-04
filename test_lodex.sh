@@ -31,7 +31,7 @@ $lodex get testkey > /dev/null
 assertEqual $? 0
 
 $lodex get invalid_testkey 2> /dev/null
-assertEqual $? 127
+assertEqual $? 1
 assertEqual `$lodex stats | grep items | cut -f2` 1
 assertEqual "`$lodex dump --sep=':' | tr '\n' ','`" "testkey:testvalue,"
 
@@ -45,10 +45,10 @@ assertEqual $? 0
 assertEqual `$lodex stats | grep items | cut -f2` 1
 assertEqual "`$lodex dump --sep=':' | tr '\n' ','`" "testkey:testvalue,"
 $lodex get another_testkey 2> /dev/null
-assertEqual $? 127
+assertEqual $? 1
 
 $lodex get testkey --db=database2.ldx 2> /dev/null
-assertEqual $? 127
+assertEqual $? 1
 
 $lodex dump | $lodex load --db=database2.ldx
 assertEqual "`$lodex dump --db=database2.ldx --sep=':' | tr '\n' ','`" "testkey:testvalue,"

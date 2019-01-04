@@ -28,18 +28,22 @@ class DirtyBlocks:
 class IndexBlock:
     def __init__(self, index_block=None):
         self.index_block = index_block if index_block is not None else {}
+        self.key_cache = None
 
     def has(self, key_frag):
         return key_frag in self.index_block
 
     def put(self, key_frag, value, typ):
         self.index_block[key_frag] = (value, typ)
+        self.key_cache = None
 
     def get(self, key_frag):
         return self.index_block[key_frag]
 
     def keys(self):
-        return sorted(self.index_block.keys())
+        if self.key_cache is None:
+            self.key_cache = sorted(self.index_block.keys())
+        return self.key_cache
 
 
 class FileLog:
@@ -309,7 +313,7 @@ if args.operation:
             db.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
-        exit(127)
+        exit(1)
     finally:
         db.close()
 else:
