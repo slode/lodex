@@ -55,6 +55,7 @@ if args.operation:
             db.walk(item_counter)
             print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
                 db.filename, counter[0], len(db)))
+            print(db.get_indices())
         elif args.operation == "dump":
             def item_printer(doc):
                 print(json.dumps(doc))

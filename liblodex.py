@@ -199,11 +199,12 @@ class LogIndex:
 class Lodex:
     def __init__(self, filename="database.ldx"):
         self.filename = os.path.realpath(filename)
+        self.root_folder = os.path.dirname(self.filename)
         self.log = FileLog(self.filename)
         self.indices = {}
         self.add_index("_id")
-        for p in os.listdir(os.path.dirname(self.filename)):
-            if p.startswith(filename+"."):
+        for p in os.listdir(self.root_folder):
+            if p.startswith(os.path.basename(self.filename) + "."):
                 self.add_index(os.path.splitext(p)[1][1:])
 
     def add_index(self, key):
@@ -216,7 +217,6 @@ class Lodex:
         offset = self.log.put(doc)
         for index_key in self.indices:
             if index_key in doc:
-                print(index_key, doc)
                 self.indices[index_key].put(doc[index_key], offset)
         return doc["_id"]
 
@@ -230,6 +230,9 @@ class Lodex:
         for index_key in self.indices:
             if index_key in doc:
                 offset = self.indices[index_key].put(doc[index_key], None)
+
+    def get_indices(self):
+        return self.indices.keys()
 
     def walk(self, cb):
         self.indices["_id"].walk(cb)
