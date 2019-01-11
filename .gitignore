@@ -1,3 +1,5 @@
 *.ldx
 *.idx
 *.csv
+__pycache__
+*.pyc
