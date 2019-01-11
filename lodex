@@ -9,36 +9,30 @@ db_parser = argparse.ArgumentParser(add_help=False)
 db_parser.add_argument(
         "--db", type=str, default="database.ldx", metavar="path",
         help="the database path (default 'database.ldx')")
-key_parser = argparse.ArgumentParser(add_help=False)
-key_parser.add_argument("key")
-value_parser = argparse.ArgumentParser(add_help=False)
-value_parser.add_argument("value")
-sep_parser = argparse.ArgumentParser(add_help=False)
-sep_parser.add_argument(
-        "--sep", type=str, default="\t",
-        help="key-value separator (default: '\\t')")
+doc_parser = argparse.ArgumentParser(add_help=False)
+doc_parser.add_argument("doc")
 
 parser = argparse.ArgumentParser(
         description='An api interfacing a ldx database.')
 sub_parsers = parser.add_subparsers(dest="operation")
 _ = sub_parsers.add_parser(
-        "put", help="add key-value pair",
-        parents=[db_parser, key_parser, value_parser])
+        "put", help="add document",
+        parents=[db_parser, doc_parser])
 _ = sub_parsers.add_parser(
-        "get", help="retrieve a value",
-        parents=[db_parser, key_parser])
+        "get", help="retrieve a document",
+        parents=[db_parser, doc_parser])
 _ = sub_parsers.add_parser(
-        "delete", help="delete a value",
-        parents=[db_parser, key_parser])
+        "delete", help="delete a document",
+        parents=[db_parser, doc_parser])
 _ = sub_parsers.add_parser(
         "stats", help="print database metrics",
         parents=[db_parser])
 _ = sub_parsers.add_parser(
-        "dump", help="print key-values to stdout",
-        parents=[db_parser, sep_parser])
+        "dump", help="print documents to stdout",
+        parents=[db_parser])
 _ = sub_parsers.add_parser(
-        "load", help="add key-value pairs from stdout",
-        parents=[db_parser, sep_parser])
+        "load", help="add documents pairs from stdout",
+        parents=[db_parser])
 
 args = parser.parse_args()
 
@@ -46,13 +40,12 @@ if args.operation:
     db = Lodex(args.db)
     try:
         if args.operation == "put":
-            db.put({"_id": args.key, "value": args.value})
+            print(json.dumps(db.put(json.loads(args.doc))))
             db.commit()
         elif args.operation == "get":
-            doc = db.get({"_id": args.key})
-            print(doc)
+            print(json.dumps(db.get(json.loads(args.doc))))
         elif args.operation == "delete":
-            db.delete({"_id": args.key})
+            print(json.dumps(db.delete(json.loads(args.doc))))
             db.commit()
         elif args.operation == "stats":
             counter = [0]
@@ -63,16 +56,12 @@ if args.operation:
             print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
                 db.filename, counter[0], len(db)))
         elif args.operation == "dump":
-            sep = args.sep.encode("utf-8").decode("unicode_escape")
-
             def item_printer(doc):
-                print(doc)
-                #print("{}{}{}".format(doc["_id"], sep, doc["value"]))
+                print(json.dumps(doc))
             db.walk(item_printer)
         elif args.operation == "load":
-            sep = args.sep.encode("utf-8").decode("unicode_escape")
             for line in sys.stdin:
-                db.put(line)
+                db.put(json.loads(line))
             db.commit()
     except BaseException as e:
         raise

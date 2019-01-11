@@ -216,6 +216,7 @@ class Lodex:
         offset = self.log.put(doc)
         for index_key in self.indices:
             if index_key in doc:
+                print(index_key, doc)
                 self.indices[index_key].put(doc[index_key], offset)
         return doc["_id"]
 
