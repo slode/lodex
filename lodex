@@ -53,9 +53,13 @@ if args.operation:
             def item_counter(_1):
                 counter[0] += 1
             db.walk(item_counter)
-            print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
-                db.filename, counter[0], len(db)))
-            print(db.get_indices())
+            stats = {
+                "db" : db.filename,
+                "items": counter[0],
+                "size": len(db),
+                "indices": list(db.get_indices())
+            }
+            print(json.dumps(stats))
         elif args.operation == "dump":
             def item_printer(doc):
                 print(json.dumps(doc))

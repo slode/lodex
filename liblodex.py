@@ -91,7 +91,7 @@ def split_by_n(seq, n):
 
 
 class LogIndex:
-    def __init__(self, filename, value_log, key="_id"):
+    def __init__(self, filename, value_log, key="_id", multi=False):
         self.log = FileLog(filename+"."+key)
         self.value_log = value_log
         self.index_key = key
@@ -205,10 +205,12 @@ class Lodex:
         self.add_index("_id")
         for p in os.listdir(self.root_folder):
             if p.startswith(os.path.basename(self.filename) + "."):
-                self.add_index(os.path.splitext(p)[1][1:])
+                index_attrs = p.split(".")
+                self.add_index(index_attrs[-1],
+                        multi=index_attrs[-2]=="multi")
 
-    def add_index(self, key):
-        self.indices[key]= LogIndex(self.filename, self.log, key=key)
+    def add_index(self, key, multi=False):
+        self.indices[key]= LogIndex(self.filename, self.log, key=key, multi=False)
 
     def put(self, doc):
         if "_id" not in doc:
