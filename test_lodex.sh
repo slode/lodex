@@ -24,8 +24,8 @@ rm -f database.ldx.idx database2.ldx.idx
 
 echo "Testing lodex database CLI"
 
-$lodex put '{"_id": "testkey", "value": "testvalue"}'
-assertEqual `$lodex get '{"_id": "testkey"}' ` '{"_id": "testkey", "value": "testvalue"}'
+$lodex put '{"_id": "testkey", "value": "testvalue"}' > /dev/null
+assertEqual "`$lodex get '{"_id": "testkey"}' `" '{"_id": "testkey", "value": "testvalue"}'
 
 $lodex get '{"_id": "testkey"}' > /dev/null
 assertEqual $? 0
