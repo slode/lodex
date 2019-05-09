@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse
 import cbor
-import sys
 
 class DirtyBlocks:
     def __init__(self):
@@ -112,7 +110,7 @@ class LogIndex:
                 elif entry[1] == 0 and entry[0] is not None:
                     record = self.value_log.get(entry[0])
                     if record["value"] is not None:
-                        callback(record)
+                        callback(record["_id"], record["value"])
         return rec_do(self.root, 0)
 
     def put(self, key, value):
@@ -201,20 +199,17 @@ class Lodex:
         self.index_log = FileLog(filename+".idx")
         self.index = LogIndex(self.index_log, self.log, key="_id")
 
-    def put(self, doc):
-        if "_id" not in doc:
-            import uuid
-            doc["_id"] = uuid.uuid4()
-        offset = self.log.put(doc)
-        self.index.put(doc["_id"], offset)
-        return doc["_id"]
+    def put(self, key, value):
+        offset = self.log.put({"_id": key, "value": value})
+        self.index.put(key, offset)
+        return key
 
-    def get(self, doc):
-        offset = self.index.get(doc["_id"])
+    def get(self, key):
+        offset = self.index.get(key)
         return self.log.get(offset)
 
-    def delete(self, doc):
-        self.index.put(doc["_id"], None)
+    def delete(self, key):
+        self.index.put(key, None)
 
     def walk(self, cb):
         self.index.walk(cb)

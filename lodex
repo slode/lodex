@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import cbor
 import sys
 from liblodex import Lodex
 
@@ -46,18 +45,18 @@ if args.operation:
     db = Lodex(args.db)
     try:
         if args.operation == "put":
-            db.put({"_id": args.key, "value": args.value})
+            db.put(args.key, args.value)
             db.commit()
         elif args.operation == "get":
-            doc = db.get({"_id": args.key})
+            doc = db.get(args.key)
             print(doc["value"])
         elif args.operation == "delete":
-            db.delete({"_id": args.key})
+            db.delete(args.key)
             db.commit()
         elif args.operation == "stats":
             counter = [0]
 
-            def item_counter(_1):
+            def item_counter(_1, _2):
                 counter[0] += 1
             db.walk(item_counter)
             print("db:\t{}\nitems:\t{}\nsize:\t{}".format(
@@ -65,14 +64,14 @@ if args.operation:
         elif args.operation == "dump":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
 
-            def item_printer(doc):
-                print("{}{}{}".format(doc["_id"], sep, doc["value"]))
+            def item_printer(key, value):
+                print("{}{}{}".format(key, sep, value))
             db.walk(item_printer)
         elif args.operation == "load":
             sep = args.sep.encode("utf-8").decode("unicode_escape")
             for line in sys.stdin:
                 key, value = line.split(sep)
-                db.put({"_id": key, "value": value.rstrip()})
+                db.put(key, value.rstrip())
             db.commit()
     except BaseException as e:
         sys.stderr.write(repr(e))
