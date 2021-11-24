@@ -73,13 +73,6 @@ class FileLog:
         value_bytes = self.file.read(length)
         return cbor.loads(value_bytes) if value_bytes else None
 
-    def scan(self):
-        end = self.read_checkpoint()
-        offset = self.file.tell()
-        while offset < end:
-            yield self.get(offset)
-            offset = self.file.tell()
-
     def __len__(self):
         self.file.seek(0, 2)
         return self.file.tell()
@@ -94,8 +87,9 @@ def split_by_n(seq, n):
         yield seq[:n]
         seq = seq[n:]
 
+
 class LogIndex:
-    def __init__(self, log, value_log, key="_id"):
+    def __init__(self, log, key="_id"):
         self.log = log
         self.value_log = value_log
         self.index_key = key

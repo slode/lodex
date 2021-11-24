@@ -36,6 +36,9 @@ _ = sub_parsers.add_parser(
         "dump", help="print key-values to stdout",
         parents=[db_parser, sep_parser])
 _ = sub_parsers.add_parser(
+        "find", help="print values of keys from stdin",
+        parents=[db_parser])
+_ = sub_parsers.add_parser(
         "load", help="add key-value pairs from stdout",
         parents=[db_parser, sep_parser])
 
@@ -48,8 +51,8 @@ if args.operation:
             db.put(args.key, args.value)
             db.commit()
         elif args.operation == "get":
-            doc = db.get(args.key)
-            print(doc["value"])
+            val = db.get(args.key)
+            print(val)
         elif args.operation == "delete":
             db.delete(args.key)
             db.commit()
@@ -73,6 +76,9 @@ if args.operation:
                 key, value = line.split(sep)
                 db.put(key, value.rstrip())
             db.commit()
+        elif args.operation == "find":
+            for key in sys.stdin:
+                print(db.get(key.rstrip()))
     except BaseException as e:
         sys.stderr.write(repr(e))
         exit(1)
